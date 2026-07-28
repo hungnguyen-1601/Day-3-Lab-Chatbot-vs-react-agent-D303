@@ -440,45 +440,48 @@ def main() -> None:
         f"từ config/test_cases.json\n"
     )
 
-    # Mặc định chạy Test Case số 4.
-    # Có thể đổi bằng TEST_CASE_ID trong file .env.
-    selected_id = int(
-        os.getenv(
-            "TEST_CASE_ID",
-            "4",
+    # Chạy lần lượt toàn bộ Test Cases
+    for test in tests:
+        print(
+            "\n" + "=" * 50
         )
-    )
 
-    sample_test = next(
-        (
-            test
-            for test in tests
-            if test.get("id") == selected_id
-        ),
-        tests[0],
-    )
+        print(
+            f"🧪 TEST CASE {test['id']}/{len(tests)}: "
+            f"{test['category']}"
+        )
 
-    sample_query = sample_test["question"]
+        print(
+            f"❓ Câu hỏi: {test['question']}"
+        )
 
-    print(
-        "--- DEMO 1: "
-        "CHẠY TRÊN CHATBOT BASELINE ---"
-    )
+        print(
+            f"🎯 Kỳ vọng: {test['expected_behavior']}"
+        )
 
-    run_baseline_chatbot(
-        sample_query,
-        provider,
-    )
+        print(
+            "=" * 50
+        )
 
-    print(
-        "\n--- DEMO 2: "
-        "CHẠY TRÊN REACT AGENT ---"
-    )
+        print(
+            "\n--- DEMO 1: "
+            "CHẠY TRÊN CHATBOT BASELINE ---"
+        )
 
-    run_react_agent(
-        sample_query,
-        provider,
-    )
+        run_baseline_chatbot(
+            test["question"],
+            provider,
+        )
+
+        print(
+            "\n--- DEMO 2: "
+            "CHẠY TRÊN REACT AGENT ---"
+        )
+
+        run_react_agent(
+            test["question"],
+            provider,
+        )
 
 
 if __name__ == "__main__":
