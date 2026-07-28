@@ -1,0 +1,35 @@
+flowchart TD
+    A([Người dùng nhập câu hỏi]) --> B{Phân loại câu hỏi}
+
+    B -->|Câu hỏi đơn giản<br/>Không cần dữ liệu thực tế| C[Chatbot Baseline]
+    C --> D[LLM trả lời bằng kiến thức có sẵn]
+    D --> Z([Trả lời người dùng])
+
+    B -->|Câu hỏi phức tạp<br/>Cần tra cứu hoặc nhiều bước| E[ReAct Agent]
+
+    E --> F[Phân tích bước tiếp theo]
+    F --> G{Có cần gọi Tool?}
+
+    G -->|Có| H{Chọn công cụ phù hợp}
+
+    H -->|Tìm khóa học| I["search_courses(topic, level)"]
+    H -->|Kiểm tra đầu vào| J["check_course_prerequisites(course_name)"]
+
+    I --> K[Nhận Observation]
+    J --> K
+
+    K --> L{Đã đủ thông tin?}
+
+    L -->|Chưa| M{Đã đạt MAX_ITERATIONS?}
+    M -->|Chưa| F
+    M -->|Rồi| N[Guardrail ngắt vòng lặp]
+    N --> O[Thông báo lỗi lịch sự]
+    O --> Z
+
+    G -->|Không| P[Tạo câu trả lời cuối cùng]
+    L -->|Đủ| P
+
+    P --> Q{Thông tin có hợp lệ?}
+    Q -->|Có| Z
+    Q -->|Không| R[Không tự tạo dữ liệu<br/>Đề xuất lựa chọn phù hợp khác]
+    R --> Z
