@@ -3,47 +3,106 @@
 Nơi khai báo tất cả các "món đồ nghề" mà ReAct Agent có thể gọi.
 """
 
-def get_weather(location: str) -> str:
+
+def search_courses(topic: str, level: str) -> str:
     """
-    Tra cứu thời tiết hiện tại của một thành phố.
-    
+    Tra cứu khóa học phù hợp theo chủ đề và trình độ của sinh viên.
+
     Args:
-        location (str): Tên thành phố (Ví dụ: 'Hà Nội', 'TP.HCM', 'Đà Nẵng')
-        
+        topic (str): Chủ đề muốn học
+                     (Ví dụ: 'Python', 'AI', 'Machine Learning')
+        level (str): Trình độ hiện tại
+                     (Ví dụ: 'Cơ bản', 'Trung cấp', 'Nâng cao')
+
     Returns:
-        str: Thông tin thời tiết chi tiết
+        str: Danh sách khóa học phù hợp
     """
-    loc_lower = location.lower()
-    if "hà nội" in loc_lower or "ha noi" in loc_lower:
-        return "Thời tiết Hà Nội: 28°C, Nắng nhẹ, Độ ẩm 65%."
-    elif "hồ chí minh" in loc_lower or "tp.hcm" in loc_lower or "hcm" in loc_lower:
-        return "Thời tiết TP.HCM: 33°C, Nắng nóng, Có mây."
-    elif "đà nẵng" in loc_lower or "da nang" in loc_lower:
-        return "Thời tiết Đà Nẵng: 30°C, Gió nhẹ, Mát mẻ."
+    topic_lower = topic.lower()
+    level_lower = level.lower()
+
+    if "python" in topic_lower:
+        return (
+            "Các khóa học Python phù hợp:\n"
+            "1. Python cơ bản - 4 tuần - Miễn phí\n"
+            "2. Python cho phân tích dữ liệu - 6 tuần - 350.000 VNĐ"
+        )
+
+    elif "machine learning" in topic_lower or "học máy" in topic_lower:
+        if "cơ bản" in level_lower or "beginner" in level_lower:
+            return (
+                "Khóa học phù hợp: Machine Learning cơ bản\n"
+                "- Thời lượng: 6 tuần\n"
+                "- Học phí: Miễn phí\n"
+                "- Yêu cầu: Biết Python cơ bản"
+            )
+
+        return (
+            "Khóa học phù hợp: Machine Learning nâng cao\n"
+            "- Thời lượng: 8 tuần\n"
+            "- Học phí: 700.000 VNĐ\n"
+            "- Yêu cầu: Đã học Machine Learning cơ bản"
+        )
+
+    elif "ai" in topic_lower or "trí tuệ nhân tạo" in topic_lower:
+        return (
+            "Các khóa học AI phù hợp:\n"
+            "1. Machine Learning cơ bản - 6 tuần - Miễn phí\n"
+            "2. Deep Learning nhập môn - 5 tuần - 450.000 VNĐ\n"
+            "3. Xây dựng dự án AI thực tế - 4 tuần - 300.000 VNĐ"
+        )
+
     else:
-        return f"LỖI: Không tìm thấy dữ liệu thời tiết cho địa điểm '{location}'."
+        return f"LỖI: Không tìm thấy khóa học phù hợp với chủ đề '{topic}'."
 
 
-def search_flights(origin: str, destination: str) -> str:
+def check_course_prerequisites(course_name: str) -> str:
     """
-    Tra cứu chuyến bay giữa hai địa điểm.
-    
+    Kiểm tra kiến thức đầu vào của một khóa học.
+
     Args:
-        origin (str): Nơi đi (Ví dụ: 'TP.HCM')
-        destination (str): Nơi đến (Ví dụ: 'Hà Nội')
-        
+        course_name (str): Tên khóa học cần kiểm tra
+                           (Ví dụ: 'Machine Learning cơ bản')
+
     Returns:
-        str: Danh sách chuyến bay khả dụng và giá vé
+        str: Thông tin về điều kiện đầu vào của khóa học
     """
-    return (
-        f"Chuyến bay từ {origin} -> {destination} ngày mai:\n"
-        f"1. VN123 (08:00) - Giá: 1,500,000 VNĐ (Còn vé)\n"
-        f"2. VJ456 (14:30) - Giá: 1,200,000 VNĐ (Còn vé)"
-    )
+    course_lower = course_name.lower()
+
+    if "python cơ bản" in course_lower:
+        return (
+            "Khóa Python cơ bản:\n"
+            "- Không yêu cầu kiến thức lập trình trước đó\n"
+            "- Phù hợp với sinh viên mới bắt đầu"
+        )
+
+    elif "machine learning" in course_lower:
+        return (
+            "Khóa Machine Learning cơ bản:\n"
+            "- Yêu cầu biết Python cơ bản\n"
+            "- Nên biết kiến thức Toán và Xác suất cơ bản"
+        )
+
+    elif "deep learning" in course_lower:
+        return (
+            "Khóa Deep Learning nhập môn:\n"
+            "- Yêu cầu biết Python\n"
+            "- Đã học Machine Learning cơ bản\n"
+            "- Biết kiến thức Đại số tuyến tính cơ bản"
+        )
+
+    elif "dự án ai" in course_lower:
+        return (
+            "Khóa Xây dựng dự án AI thực tế:\n"
+            "- Yêu cầu biết Python\n"
+            "- Đã học Machine Learning cơ bản"
+        )
+
+    else:
+        return f"LỖI: Không tìm thấy thông tin khóa học '{course_name}'."
 
 
 # Danh sách các tool được đăng ký để Agent sử dụng
 AVAILABLE_TOOLS = {
-    "get_weather": get_weather,
-    "search_flights": search_flights,
+    "search_courses": search_courses,
+    "check_course_prerequisites": check_course_prerequisites,
 }
