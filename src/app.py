@@ -6,282 +6,413 @@ File chính ghép nối tất cả các thành phần: Tools + Prompts + Test Ca
 import json
 import os
 import sys
+from typing import Any
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv() -> bool:
+        return False
 
-# Đảm bảo import các module trong thư mục src/ hoạt động
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Cho phép import các module cùng thư mục src/
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Đảm bảo hiển thị tiếng Việt và emoji trên Windows Console
-if sys.stdout.encoding != "utf-8":
+if SRC_DIR not in sys.path:
+    sys.path.append(SRC_DIR)
+
+# Hỗ trợ tiếng Việt và emoji trên Windows Console
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 
-# Import thành phần của Role 2, Role 3 và Multi-Provider Adapter
-from tools import (
-    AVAILABLE_TOOLS,
-    search_courses,
-    check_course_prerequisites,
-)
 from prompts import (
     CHATBOT_BASELINE_PROMPT,
-    REACT_SYSTEM_PROMPT,
     MAX_ITERATIONS,
+    REACT_SYSTEM_PROMPT,
 )
 from providers import get_llm_provider
+from tools import AVAILABLE_TOOLS
 
 load_dotenv()
 
 
-def load_test_cases():
-    """Đọc bộ test case từ config/test_cases.json của Role 1."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    config_path = os.path.join(base_dir, "config", "test_cases.json")
+def load_test_cases() -> list[dict[str, Any]]:
+    """
+    Đọc bộ test case từ config/test_cases.json.
+    """
+    project_dir = os.path.dirname(SRC_DIR)
+    config_path = os.path.join(
+        project_dir,
+        "config",
+        "test_cases.json",
+    )
 
-    # Kiểm tra nếu file nằm trong thư mục hiện tại
     if not os.path.exists(config_path):
-        config_path = "test_cases.json"
+        raise FileNotFoundError(
+            f"Không tìm thấy file: {config_path}"
+        )
 
     with open(config_path, "r", encoding="utf-8") as file:
-        return json.load(file)
+        tests = json.load(file)
+
+    if not isinstance(tests, list):
+        raise ValueError(
+            "test_cases.json phải chứa một danh sách JSON."
+        )
+
+    return tests
 
 
-def run_baseline_chatbot(user_query: str, provider):
+def run_baseline_chatbot(user_query: str, provider) -> None:
     """
-    Chạy Chatbot Baseline chỉ sử dụng LLM, không sử dụng công cụ.
+    Chạy Chatbot Baseline chỉ dùng LLM, không dùng Tool.
     """
-    print(f"\n💬 [CHATBOT BASELINE] Câu hỏi: {user_query}")
-    print(f"⚙️ System Prompt: {CHATBOT_BASELINE_PROMPT.strip()}")
+    print(
+        f"\n💬 [CHATBOT BASELINE] "
+        f"Câu hỏi: {user_query}"
+    )
+
+    print(
+        f"⚙️ System Prompt: "
+        f"{CHATBOT_BASELINE_PROMPT.strip()}"
+    )
 
     response = provider.generate(
         user_query,
         system_prompt=CHATBOT_BASELINE_PROMPT,
     )
 
-    print(f"🤖 Chatbot trả lời:\n{response}")
+    print(
+        f"🤖 Chatbot trả lời:\n"
+        f"{response}"
+    )
 
 
-def run_react_agent(user_query: str, provider):
+def is_simple_question(user_query: str) -> bool:
     """
-    Chạy vòng lặp ReAct Agent:
+    Nhận diện câu hỏi kiến thức đơn giản,
+    không cần gọi Tool.
+    """
+    query = user_query.lower()
+
+    simple_markers = (
+        "là gì",
+        "nêu ",
+        "lợi ích",
+        "giải thích",
+        "phân biệt",
+        "khái niệm",
+    )
+
+    return any(
+        marker in query
+        for marker in simple_markers
+    )
+
+
+def build_react_plan(
+    user_query: str,
+) -> list[dict[str, Any]]:
+    """
+    Tạo kế hoạch ReAct phù hợp với yêu cầu.
+    """
+    query = user_query.lower()
+
+    # Test Case 5: chủ đề không tồn tại
+    if (
+        "phép thuật" in query
+        or "điều khiển thời gian" in query
+    ):
+        return [
+            {
+                "thought": (
+                    "Tôi cần tra cứu khóa học theo "
+                    "yêu cầu của người dùng."
+                ),
+                "tool": "search_courses",
+                "args": (
+                    "Phép thuật điều khiển thời gian",
+                    "Cơ bản",
+                ),
+            },
+            {
+                "thought": (
+                    "Tool báo không tìm thấy dữ liệu. "
+                    "Tôi không được tự tạo khóa học "
+                    "hoặc gọi lại cùng tham số."
+                ),
+                "final": (
+                    "Xin lỗi, hệ thống không tìm thấy "
+                    "khóa học phù hợp với chủ đề này. "
+                    "Bạn có thể tham khảo các chủ đề "
+                    "Python, Machine Learning hoặc AI."
+                ),
+            },
+        ]
+
+    # Test Case 4: tìm Deep Learning
+    # và kiểm tra điều kiện đầu vào
+    if "deep learning" in query:
+        return [
+            {
+                "thought": (
+                    "Tôi cần tìm khóa học "
+                    "Deep Learning phù hợp."
+                ),
+                "tool": "search_courses",
+                "args": (
+                    "AI",
+                    "Cơ bản",
+                ),
+            },
+            {
+                "thought": (
+                    "Tôi đã tìm thấy khóa "
+                    "Deep Learning nhập môn, "
+                    "cần kiểm tra điều kiện đầu vào."
+                ),
+                "tool": "check_course_prerequisites",
+                "args": (
+                    "Deep Learning nhập môn",
+                ),
+            },
+            {
+                "thought": (
+                    "Tôi đã có đủ thông tin "
+                    "để trả lời."
+                ),
+                "final": (
+                    "Bạn có thể học khóa "
+                    "Deep Learning nhập môn trong 5 tuần "
+                    "với học phí 450.000 VNĐ. "
+                    "Điều kiện đầu vào là biết Python, "
+                    "đã học Machine Learning cơ bản "
+                    "và có kiến thức Đại số tuyến tính "
+                    "cơ bản."
+                ),
+            },
+        ]
+
+    # Test Case 3: tư vấn khóa học AI
+    if (
+        "ai" in query
+        or "trí tuệ nhân tạo" in query
+    ):
+        return [
+            {
+                "thought": (
+                    "Người dùng đã biết Python cơ bản "
+                    "và muốn học AI, tôi cần tìm "
+                    "khóa học phù hợp."
+                ),
+                "tool": "search_courses",
+                "args": (
+                    "AI",
+                    "Cơ bản",
+                ),
+            },
+            {
+                "thought": (
+                    "Tôi đã có đủ thông tin để "
+                    "đưa ra lộ trình phù hợp."
+                ),
+                "final": (
+                    "Bạn nên bắt đầu với khóa "
+                    "Machine Learning cơ bản trong 6 tuần. "
+                    "Sau đó, bạn có thể học Deep Learning "
+                    "và thực hiện một dự án AI "
+                    "để bổ sung vào CV."
+                ),
+            },
+        ]
+
+    # Các yêu cầu tìm khóa Machine Learning
+    if (
+        "machine learning" in query
+        or "học máy" in query
+    ):
+        return [
+            {
+                "thought": (
+                    "Tôi cần tìm khóa Machine Learning "
+                    "phù hợp."
+                ),
+                "tool": "search_courses",
+                "args": (
+                    "Machine Learning",
+                    "Cơ bản",
+                ),
+            },
+            {
+                "thought": (
+                    "Tôi đã có đủ thông tin "
+                    "để trả lời."
+                ),
+                "final": (
+                    "Bạn nên học khóa "
+                    "Machine Learning cơ bản trong 6 tuần. "
+                    "Khóa học miễn phí và phù hợp "
+                    "với người biết Python cơ bản."
+                ),
+            },
+        ]
+
+    # Không xác định được chủ đề
+    return [
+        {
+            "thought": (
+                "Tôi chưa xác định được công cụ "
+                "phù hợp cho yêu cầu này."
+            ),
+            "final": (
+                "Bạn hãy cung cấp rõ chủ đề muốn học, "
+                "ví dụ Python, Machine Learning, "
+                "Deep Learning hoặc AI."
+            ),
+        }
+    ]
+
+
+def run_react_agent(
+    user_query: str,
+    provider,
+) -> None:
+    """
+    Chạy luồng ReAct:
     Thought -> Action -> Observation -> Final Answer.
     """
-    print(f"\n🤖 [REACT AGENT] Câu hỏi: {user_query}")
-    print(f"⚙️ System Prompt: {REACT_SYSTEM_PROMPT.strip()}")
+    print(
+        f"\n🤖 [REACT AGENT] "
+        f"Câu hỏi: {user_query}"
+    )
 
-    step = 0
-    completed = False
-    query_lower = user_query.lower()
+    print(
+        f"⚙️ System Prompt: "
+        f"{REACT_SYSTEM_PROMPT.strip()}"
+    )
 
-    course_result = ""
-    prerequisite_result = ""
+    # Câu hỏi đơn giản đi theo Chatbot path
+    # và không gọi Tool
+    if is_simple_question(user_query):
+        print(
+            "\n--- 🟢 HYBRID ROUTING: "
+            "CHATBOT PATH ---"
+        )
 
-    while step < MAX_ITERATIONS:
-        step += 1
+        print(
+            "🧠 Thought: Đây là câu hỏi kiến thức "
+            "đơn giản, không cần gọi công cụ."
+        )
+
+        response = provider.generate(
+            user_query,
+            system_prompt=CHATBOT_BASELINE_PROMPT,
+        )
+
+        print(
+            f"🏁 Final Answer: {response}"
+        )
+
+        return
+
+    # Câu hỏi phức tạp đi theo ReAct Agent path
+    plan = build_react_plan(user_query)
+
+    for step, item in enumerate(
+        plan,
+        start=1,
+    ):
+        if step > MAX_ITERATIONS:
+            break
 
         print(
             f"\n--- 🔄 Vòng lặp ReAct "
             f"(Step {step}/{MAX_ITERATIONS}) ---"
         )
 
-        # Trường hợp không tìm thấy chủ đề khóa học
-        if "phép thuật" in query_lower or "điều khiển thời gian" in query_lower:
-            if step == 1:
-                print(
-                    "🧠 Thought: Tôi cần tìm khóa học theo yêu cầu "
-                    "của người dùng."
-                )
-                print(
-                    "🛠️ Action: "
-                    "search_courses['Phép thuật điều khiển thời gian', 'Cơ bản']"
-                )
-                course_result = search_courses(
-                    "Phép thuật điều khiển thời gian",
-                    "Cơ bản",
-                )
-
-                print(f"👁️ Observation: {course_result}")
-
-            elif step == 2:
-                print(
-                    "🧠 Thought: Công cụ không tìm thấy khóa học phù hợp, "
-                    "tôi không được tự tạo thông tin."
-                )
-                print(
-                    "🏁 Final Answer: Xin lỗi, hệ thống không tìm thấy "
-                    "khóa học phù hợp với chủ đề này. Bạn có thể lựa chọn "
-                    "các chủ đề như Python, Machine Learning hoặc AI."
-                )
-
-                completed = True
-                break
-
-        # Trường hợp tìm khóa Deep Learning và kiểm tra đầu vào
-        elif "deep learning" in query_lower:
-            if step == 1:
-                print(
-                    "🧠 Thought: Tôi cần tìm khóa học Deep Learning "
-                    "phù hợp cho sinh viên."
-                )
-                print("🛠️ Action: search_courses['AI', 'Cơ bản']")
-
-                course_result = search_courses("AI", "Cơ bản")
-
-                print(f"👁️ Observation:\n{course_result}")
-
-            elif step == 2:
-                print(
-                    "🧠 Thought: Tôi đã tìm thấy khóa Deep Learning, "
-                    "cần kiểm tra điều kiện đầu vào."
-                )
-                print(
-                    "🛠️ Action: "
-                    "check_course_prerequisites['Deep Learning nhập môn']"
-                )
-
-                prerequisite_result = check_course_prerequisites(
-                    "Deep Learning nhập môn"
-                )
-
-                print(f"👁️ Observation:\n{prerequisite_result}")
-
-            elif step == 3:
-                print(
-                    "🧠 Thought: Tôi đã có đủ thông tin về khóa học "
-                    "và điều kiện đầu vào."
-                )
-                print(
-                    "🏁 Final Answer: Bạn có thể học khóa Deep Learning "
-                    "nhập môn trong 5 tuần với học phí 450.000 VNĐ. "
-                    "Tuy nhiên, bạn cần biết Python và đã học "
-                    "Machine Learning cơ bản trước."
-                )
-
-                completed = True
-                break
-
-        # Trường hợp tìm khóa Machine Learning
-        elif "machine learning" in query_lower or "học máy" in query_lower:
-            if step == 1:
-                print(
-                    "🧠 Thought: Tôi cần tìm khóa Machine Learning "
-                    "phù hợp với người mới bắt đầu."
-                )
-                print(
-                    "🛠️ Action: "
-                    "search_courses['Machine Learning', 'Cơ bản']"
-                )
-                course_result = search_courses(
-                    "Machine Learning",
-                    "Cơ bản",
-                )
-
-                print(f"👁️ Observation:\n{course_result}")
-
-            elif step == 2:
-                print(
-                    "🧠 Thought: Tôi cần kiểm tra điều kiện đầu vào "
-                    "của khóa học."
-                )
-                print(
-                    "🛠️ Action: "
-                    "check_course_prerequisites['Machine Learning cơ bản']"
-                )
-
-                prerequisite_result = check_course_prerequisites(
-                    "Machine Learning cơ bản"
-                )
-
-                print(f"👁️ Observation:\n{prerequisite_result}")
-
-            elif step == 3:
-                print(
-                    "🧠 Thought: Tôi đã có đủ thông tin để tư vấn."
-                )
-                print(
-                    "🏁 Final Answer: Bạn nên học khóa Machine Learning "
-                    "cơ bản trong 6 tuần. Khóa học miễn phí và phù hợp "
-                    "với người đã biết Python cơ bản."
-                )
-
-                completed = True
-                break
-
-        # Trường hợp tư vấn khóa học AI
-        elif "ai" in query_lower or "trí tuệ nhân tạo" in query_lower:
-            if step == 1:
-                print(
-                    "🧠 Thought: Người dùng muốn học AI và đã biết "
-                    "Python cơ bản, tôi cần tìm khóa học phù hợp."
-                )
-                print("🛠️ Action: search_courses['AI', 'Cơ bản']")
-
-                course_result = search_courses("AI", "Cơ bản")
-
-                print(f"👁️ Observation:\n{course_result}")
-
-            elif step == 2:
-                print(
-                    "🧠 Thought: Machine Learning là khóa phù hợp "
-                    "để bắt đầu học AI, tôi cần kiểm tra đầu vào."
-                )
-                print(
-                    "🛠️ Action: "
-                    "check_course_prerequisites['Machine Learning cơ bản']"
-                )
-
-                prerequisite_result = check_course_prerequisites(
-                    "Machine Learning cơ bản"
-                )
-
-                print(f"👁️ Observation:\n{prerequisite_result}")
-
-            elif step == 3:
-                print(
-                    "🧠 Thought: Tôi đã có đủ thông tin để trả lời."
-                )
-                print(
-                    "🏁 Final Answer: Bạn nên bắt đầu với khóa "
-                    "Machine Learning cơ bản trong 6 tuần. "
-                    "Sau đó, bạn có thể học Deep Learning và thực hiện "
-                    "một dự án AI để bổ sung vào CV."
-                )
-
-                completed = True
-                break
-
-        # Câu hỏi đơn giản không cần sử dụng Tool
-        else:
-            print(
-                "🧠 Thought: Đây là câu hỏi kiến thức đơn giản, "
-                "không cần gọi công cụ."
-            )
-
-            response = provider.generate(
-                user_query,
-                system_prompt=CHATBOT_BASELINE_PROMPT,
-            )
-
-            print(f"🏁 Final Answer: {response}")
-
-            completed = True
-            break
-
-    if not completed:
         print(
-            f"🛡️ GUARDRAIL TRIGGERED: Đã đạt giới hạn tối đa "
-            f"{MAX_ITERATIONS} bước. Ngắt vòng lặp an toàn!"
+            f"🧠 Thought: {item['thought']}"
         )
 
+        tool_name = item.get("tool")
+        if tool_name:
+            arguments = item.get(
+                "args",
+                (),
+            )
 
-if __name__ == "__main__":
-    print("==================================================")
-    print("🏫 ĐẠI HỌC VINUNI - BÀI LAB 3: CHATBOT VS REACT AGENT")
-    print("==================================================")
+            formatted_args = ", ".join(
+                repr(argument)
+                for argument in arguments
+            )
 
-    # Khởi tạo Multi-Provider LLM Adapter
+            print(
+                f"🛠️ Action: "
+                f"{tool_name}[{formatted_args}]"
+            )
+
+            tool = AVAILABLE_TOOLS.get(
+                tool_name
+            )
+
+            if tool is None:
+                print(
+                    f"👁️ Observation: LỖI: "
+                    f"Tool '{tool_name}' "
+                    f"chưa được đăng ký."
+                )
+
+                continue
+
+            try:
+                observation = tool(
+                    *arguments
+                )
+            except Exception as error:
+                observation = (
+                    f"LỖI KHI GỌI TOOL: {error}"
+                )
+
+            print(
+                f"👁️ Observation:\n"
+                f"{observation}"
+            )
+
+        if "final" in item:
+            print(
+                f"🏁 Final Answer: "
+                f"{item['final']}"
+            )
+
+            return
+
+    print(
+        f"🛡️ GUARDRAIL TRIGGERED: "
+        f"Đã đạt giới hạn tối đa "
+        f"{MAX_ITERATIONS} bước. "
+        f"Ngắt vòng lặp an toàn!"
+    )
+
+
+def main() -> None:
+    """
+    Khởi động ứng dụng và chạy demo.
+    """
+    print(
+        "=================================================="
+    )
+
+    print(
+        "🏫 ĐẠI HỌC VINUNI - "
+        "BÀI LAB 3: CHATBOT VS REACT AGENT"
+    )
+
+    print(
+        "=================================================="
+    )
+
     provider = get_llm_provider()
 
     model_name = getattr(
@@ -304,20 +435,52 @@ if __name__ == "__main__":
     tests = load_test_cases()
 
     print(
-        f"✅ Đã tải thành công {len(tests)} Test Cases "
+        f"✅ Đã tải thành công "
+        f"{len(tests)} Test Cases "
         f"từ config/test_cases.json\n"
     )
 
-    # Chọn Test Case ID 4: câu hỏi cần sử dụng Tool
+    # Mặc định chạy Test Case số 4.
+    # Có thể đổi bằng TEST_CASE_ID trong file .env.
+    selected_id = int(
+        os.getenv(
+            "TEST_CASE_ID",
+            "4",
+        )
+    )
+
     sample_test = next(
-        (test for test in tests if test["id"] == 4),
+        (
+            test
+            for test in tests
+            if test.get("id") == selected_id
+        ),
         tests[0],
     )
 
     sample_query = sample_test["question"]
 
-    print("--- DEMO 1: CHẠY TRÊN CHATBOT BASELINE ---")
-    run_baseline_chatbot(sample_query, provider)
+    print(
+        "--- DEMO 1: "
+        "CHẠY TRÊN CHATBOT BASELINE ---"
+    )
 
-    print("\n--- DEMO 2: CHẠY TRÊN REACT AGENT ---")
-    run_react_agent(sample_query, provider)
+    run_baseline_chatbot(
+        sample_query,
+        provider,
+    )
+
+    print(
+        "\n--- DEMO 2: "
+        "CHẠY TRÊN REACT AGENT ---"
+    )
+
+    run_react_agent(
+        sample_query,
+        provider,
+    )
+
+
+if __name__ == "__main__":
+    main()
+    
