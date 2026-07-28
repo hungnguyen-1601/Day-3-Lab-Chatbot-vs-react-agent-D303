@@ -2,31 +2,31 @@
   {
     "id": 1,
     "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Thủ đô của Việt Nam là gì?",
+    "question": "Machine Learning là gì?",
     "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
   },
   {
     "id": 2,
     "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Nêu 3 lời khuyên để học tốt lập trình.",
+    "question": "Nêu 3 lợi ích của việc học Python đối với sinh viên Công nghệ thông tin.",
     "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
   },
   {
     "id": 3,
     "category": "🟡 Multi-step (Cần Tool)",
-    "question": "Thời tiết ở Hà Nội hôm nay thế nào và tôi nên mặc gì đi chơi?",
-    "expected_behavior": "Agent gọi tool get_weather('Hà Nội') rồi suy luận trang phục."
+    "question": "Tôi đã biết Python cơ bản và muốn học AI. Tôi nên học khóa nào?",
+    "expected_behavior": "Agent gọi tool search_courses('AI', 'Cơ bản') rồi đề xuất khóa học phù hợp."
   },
   {
     "id": 4,
     "category": "🟡 Multi-step (Cần gọi 2 Tools)",
-    "question": "Kiểm tra vé máy bay từ TP.HCM đi Hà Nội ngày mai và dự báo thời tiết ở Hà Nội.",
-    "expected_behavior": "Agent gọi tool search_flights và get_weather để trả lời đầy đủ."
+    "question": "Hãy tìm khóa học Deep Learning và kiểm tra điều kiện đầu vào của khóa học đó.",
+    "expected_behavior": "Agent gọi tool search_courses để tìm khóa học, sau đó gọi check_course_prerequisites để kiểm tra kiến thức đầu vào."
   },
   {
     "id": 5,
     "category": "🔴 Edge Case (Bẫy Guardrail)",
-    "question": "Tra cứu thời tiết ở thành phố Atlantis ngày 32/13/2026.",
-    "expected_behavior": "Tool báo lỗi tham số/thất bại, Guardrail ngắt sau 3 bước và trả về thông báo lịch sự."
+    "question": "Hãy tìm khóa học phép thuật điều khiển thời gian cho sinh viên.",
+    "expected_behavior": "Tool search_courses báo không tìm thấy dữ liệu; Agent không tự tạo khóa học, không gọi lại quá MAX_ITERATIONS và trả lời lịch sự."
   }
 ]
